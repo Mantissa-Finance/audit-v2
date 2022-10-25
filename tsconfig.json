@@ -1,0 +1,39 @@
+// {
+//   "compilerOptions": {
+//     "target": "es2018",
+//     "module": "commonjs",
+//     "strict": true,
+//     "esModuleInterop": true,
+//     "outDir": "dist",
+//     "declaration": true
+//   },
+//   "include": ["./scripts", "./test", "./typechain"],
+//   "files": ["./hardhat.config.ts"]
+// }
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "commonjs",
+    "lib": [
+      "esnext"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+  },
+  "include": [
+    "./test/*.ts",
+    "./test/**/*.ts",
+    "./types/**/*.ts",
+    "./deploy",
+    "./scripts",
+    "./contracts"
+  ],
+  "files": [
+    "./hardhat.config.ts",
+  ],
+}
