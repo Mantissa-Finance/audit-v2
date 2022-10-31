@@ -25,7 +25,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     uint256 public veMntPerSec;
     uint256 public decayFactor;
-    IERC20 public mnt;
+    IERC20 public mntLp;
     address[] public masterMantisList;
 
     struct UserData {
@@ -51,15 +51,15 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         _;
     }
 
-    function initialize(address _mnt) public initializer {
-        require(address(_mnt) != address(0), 'zero address');
+    function initialize(address _mntLp) public initializer {
+        require(address(_mntLp) != address(0), 'zero address');
         __ERC20_init('vote MNT', 'veMNT');
         __Ownable_init();
         __ReentrancyGuard_init_unchained();
 
         veMntPerSec = 3170979198376;
         decayFactor = veMntPerSec / (2 * 365 days);     // veMnt rate goes to 0 after 2 years.
-        mnt = IERC20(_mnt);
+        mntLp = IERC20(_mntLp);
     }
 
     function addMasterMantis(address _masterMantis) external onlyOwner {
@@ -94,7 +94,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     function deposit(uint256 amount) external checkCaller nonReentrant {
         require(amount > 0, "Cannot be 0");
-        mnt.safeTransferFrom(msg.sender, address(this), amount);
+        mntLp.safeTransferFrom(msg.sender, address(this), amount);
         UserData memory user = userData[msg.sender];
         if (user.amount == 0) {
             user.veMntRate = veMntPerSec;
@@ -147,7 +147,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
             veMntRate: veMntPerSec,
             lastClaim: block.timestamp
         });
-        mnt.safeTransfer(msg.sender, amount);
+        mntLp.safeTransfer(msg.sender, amount);
         emit Withdraw(msg.sender, amount);
     }
 
@@ -158,27 +158,27 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
     function takeVeMnt(
         address from,
         uint256 percent
-    ) external override onlyMarketplace returns (uint256 mntAmount, uint256 veMntAmount, uint256 veMntRate) {
+    ) external override onlyMarketplace returns (uint256 mntLpAmount, uint256 veMntAmount, uint256 veMntRate) {
         UserData memory user = userData[from];
-        mntAmount = user.amount * percent / 1e4;
+        mntLpAmount = user.amount * percent / 1e4;
         veMntAmount = balanceOf(from) * percent / 1e4;
         veMntRate = user.veMntRate;
-        userData[from].amount -= mntAmount;
-        mnt.safeTransfer(marketplace, mntAmount);
+        userData[from].amount -= mntLpAmount;
+        mntLp.safeTransfer(marketplace, mntLpAmount);
         _transfer(from, marketplace, veMntAmount);
     }
 
     function releaseVeMnt(
         address from,
-        uint256 mntAmount,
+        uint256 mntLpAmount,
         uint256 veMntAmount,
         uint256 veMntRate
     ) external override onlyMarketplace returns (bool) {
         UserData memory user = userData[from];
-        mnt.safeTransferFrom(marketplace, address(this), mntAmount);
+        mntLp.safeTransferFrom(marketplace, address(this), mntLpAmount);
         _transfer(marketplace, from, veMntAmount);
-        user.veMntRate = _getNewRate(user, mntAmount, veMntRate);
-        user.amount += mntAmount;
+        user.veMntRate = _getNewRate(user, mntLpAmount, veMntRate);
+        user.amount += mntLpAmount;
         userData[from] = user;
         return true;
     }
@@ -186,16 +186,16 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
     function exchangeVeMnt(
         address from,
         address to,
-        uint256 mntAmount,
+        uint256 mntLpAmount,
         uint256 veMntAmount,
         uint256 veMntRate
     ) external override onlyMarketplace returns (bool) {
         _claim(to);
         UserData memory userTo = userData[to];
-        mnt.safeTransferFrom(marketplace, address(this), mntAmount);
+        mntLp.safeTransferFrom(marketplace, address(this), mntLpAmount);
         _transfer(marketplace, to, veMntAmount);
-        userTo.veMntRate = _getNewRate(userTo, mntAmount, veMntRate);
-        userTo.amount += mntAmount;
+        userTo.veMntRate = _getNewRate(userTo, mntLpAmount, veMntRate);
+        userTo.amount += mntLpAmount;
         if (userTo.lastClaim == 0) {
             userTo.lastClaim = block.timestamp;
         }

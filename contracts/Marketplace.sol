@@ -27,7 +27,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     event AllowedTokenSet(address indexed token, bool status);
 
     struct Listing {
-        uint256 mntAmount;
+        uint256 mntLpAmount;
         uint256 veMntAmount;
         uint256 veMntRate;
         uint256 minPrice;       // 6 decimals
@@ -56,7 +56,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     uint256 public cooldown;
     uint256 public maxAuctionDuration;
 
-    IERC20 public mnt;
+    IERC20 public mntLp;
     IveMNT public veMnt;
 
     modifier notWhitelisted() {
@@ -74,14 +74,14 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    function initialize(address _mnt, address _veMnt, address _treasury) external initializer {
-        require(_mnt != address(0), "Cannot be zero address");
+    function initialize(address _mntLp, address _veMnt, address _treasury) external initializer {
+        require(_mntLp != address(0), "Cannot be zero address");
         require(_veMnt != address(0), "Cannot be zero address");
         require(_treasury != address(0), "Cannot be zero address");
         __Ownable_init_unchained();
         __Pausable_init_unchained();
         __ReentrancyGuard_init_unchained();
-        mnt = IERC20(_mnt);
+        mntLp = IERC20(_mntLp);
         veMnt = IveMNT(_veMnt);
         treasury = _treasury;
 
@@ -140,12 +140,12 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 startTime = block.timestamp + cooldown;
         uint256 endTime = startTime + endDuration;
 
-        (uint256 mntAmount, uint256 veMntAmount, uint256 veMntRate) = veMnt.takeVeMnt(msg.sender, percent);
+        (uint256 mntLpAmount, uint256 veMntAmount, uint256 veMntRate) = veMnt.takeVeMnt(msg.sender, percent);
         require(veMntAmount > 0, "Cannot be 0 amount");
 
         uint256 lid = userListingCount[msg.sender] + 1;
         Listing memory listing = Listing({
-            mntAmount: mntAmount,
+            mntLpAmount: mntLpAmount,
             veMntAmount: veMntAmount,
             veMntRate: veMntRate,
             minPrice: minPrice,
@@ -164,8 +164,8 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(listing.veMntAmount > 0 && !listing.sold, "No such listing");
         require(bids[msg.sender][lid].bidder == address(0), "Bid already made");
 
-        mnt.approve(address(veMnt), listing.mntAmount);
-        require(veMnt.releaseVeMnt(msg.sender, listing.mntAmount, listing.veMntAmount, listing.veMntRate), "Error");
+        mntLp.approve(address(veMnt), listing.mntLpAmount);
+        require(veMnt.releaseVeMnt(msg.sender, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
         delete listings[msg.sender][lid];
         emit ListingDeleted(msg.sender, lid);
     }
@@ -179,8 +179,8 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 sellerAmount = tokenAmount - feeAmount;
         IERC20(token).safeTransferFrom(msg.sender, seller, sellerAmount);
         IERC20(token).safeTransferFrom(msg.sender, treasury, feeAmount);
-        mnt.approve(address(veMnt), listing.mntAmount);
-        require(veMnt.exchangeVeMnt(seller, msg.sender, listing.mntAmount, listing.veMntAmount, listing.veMntRate), "Error");
+        mntLp.approve(address(veMnt), listing.mntLpAmount);
+        require(veMnt.exchangeVeMnt(seller, msg.sender, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
         listings[seller][lid].sold = true;
         emit Bought(seller, lid, msg.sender, token, listing.minPrice);
     }
@@ -225,8 +225,8 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 sellerAmount = tokenAmount - feeAmount;
         IERC20(token).safeTransfer(seller, sellerAmount);
         IERC20(token).safeTransfer(treasury, feeAmount);
-        mnt.approve(address(veMnt), listing.mntAmount);
-        require(veMnt.exchangeVeMnt(seller, bidder, listing.mntAmount, listing.veMntAmount, listing.veMntRate), "Error");
+        mntLp.approve(address(veMnt), listing.mntLpAmount);
+        require(veMnt.exchangeVeMnt(seller, bidder, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
         listings[seller][lid].sold = true;
         emit Bought(seller, lid, bidder, token, bid.amount);
     }
