@@ -6,7 +6,7 @@ interface IveMNT {
 
     function takeVeMnt(address from, uint256 percent) external returns (uint256, uint256, uint256);
     
-    function releaseVeMnt(address from, uint256 mntAmount, uint256 veMntAmount, uint256 veMntRate) external returns (bool);
+    function releaseVeMnt(address from, uint256 mntLpAmount, uint256 veMntAmount, uint256 veMntRate) external returns (bool);
 
-    function exchangeVeMnt(address from, address to, uint256 mntAmount, uint256 veMntAmount, uint256 veMntRate) external returns (bool);
+    function exchangeVeMnt(address from, address to, uint256 mntLpAmount, uint256 veMntAmount, uint256 veMntRate) external returns (bool);
 }

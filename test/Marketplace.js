@@ -160,7 +160,7 @@ describe("Marketplace", async function () {
 
         const listing = await marketplace.listings(deployer, 1)
         expect(listing.veMntRate).to.be.eq(oldUserData.veMntRate)
-        expect(parseInt(fromWei(listing.mntAmount))).to.be.eq(mntTransfer)
+        expect(parseInt(fromWei(listing.mntLpAmount))).to.be.eq(mntTransfer)
         expect(parseInt(fromWei(listing.veMntAmount))).to.be.eq(veMntTransfer)
 
         expect(parseInt(fromWei(await mnt.balanceOf(marketplace.address)))).to.be.eq(mntTransfer)
@@ -185,7 +185,7 @@ describe("Marketplace", async function () {
 
         const listing = await marketplace.listings(deployer, 1)
         expect(listing.veMntRate).to.be.eq(0)
-        expect(parseInt(fromWei(listing.mntAmount))).to.be.eq(0)
+        expect(parseInt(fromWei(listing.mntLpAmount))).to.be.eq(0)
         expect(parseInt(fromWei(listing.veMntAmount))).to.be.eq(0)
 
         expect(parseInt(fromWei(await mnt.balanceOf(marketplace.address)))).to.be.eq(0)
