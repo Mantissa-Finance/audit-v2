@@ -9,4 +9,8 @@ contract MNT is ERC20 {
         uint supply = 500_000_000e18;
         _mint(treasury, supply);
     }
+
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
 }

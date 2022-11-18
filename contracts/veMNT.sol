@@ -87,9 +87,19 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         emit WhitelistSet(_whitelist, _status);
     }
 
-    function _getNewRate(UserData memory user, uint256 amount, uint256 amountRate) internal pure returns (uint256) {
+    function _getNewRate(
+        UserData memory user,
+        uint256 amount,
+        uint256 amountRate
+    ) internal view returns (uint256 newRate, uint256 newLastClaim) {
         uint256 currentAmount = user.amount;
-        return ((currentAmount * user.veMntRate) + (amount * amountRate)) / (currentAmount + amount);
+        uint256 newAmount = currentAmount + amount;
+        newRate = ((currentAmount * user.veMntRate) + (amount * amountRate)) / newAmount;
+        if (newAmount > 0 && newRate > 0) {
+            newLastClaim = block.timestamp - ((currentAmount * user.veMntRate * (block.timestamp - user.lastClaim)) / (newAmount * newRate));
+        } else {
+            newLastClaim = block.timestamp;
+        }
     }
 
     function deposit(uint256 amount) external checkCaller nonReentrant {
@@ -101,8 +111,9 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
             user.lastClaim = block.timestamp;
             user.amount = amount;
         } else {
-            uint256 newRate = _getNewRate(user, amount, veMntPerSec);
+            (uint256 newRate, uint256 newLastClaim) = _getNewRate(user, amount, veMntPerSec);
             user.veMntRate = newRate;
+            user.lastClaim = newLastClaim;
             user.amount += amount;
         }
         userData[msg.sender] = user;
@@ -142,6 +153,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         require(user.amount >= amount, "Cannot withdraw more than deposited");
         uint256 veMntBalance = balanceOf(msg.sender);
         _burn(msg.sender, veMntBalance);
+        _triggerVoteReset(msg.sender);
         userData[msg.sender] = UserData({
             amount: user.amount - amount,
             veMntRate: veMntPerSec,
@@ -177,7 +189,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         UserData memory user = userData[from];
         mntLp.safeTransferFrom(marketplace, address(this), mntLpAmount);
         _transfer(marketplace, from, veMntAmount);
-        user.veMntRate = _getNewRate(user, mntLpAmount, veMntRate);
+        (user.veMntRate, user.lastClaim) = _getNewRate(user, mntLpAmount, veMntRate);
         user.amount += mntLpAmount;
         userData[from] = user;
         return true;
@@ -194,19 +206,19 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         UserData memory userTo = userData[to];
         mntLp.safeTransferFrom(marketplace, address(this), mntLpAmount);
         _transfer(marketplace, to, veMntAmount);
-        userTo.veMntRate = _getNewRate(userTo, mntLpAmount, veMntRate);
+        (userTo.veMntRate, userTo.lastClaim) = _getNewRate(userTo, mntLpAmount, veMntRate);
         userTo.amount += mntLpAmount;
-        if (userTo.lastClaim == 0) {
-            userTo.lastClaim = block.timestamp;
-        }
         userData[to] = userTo;
+        _triggerVoteReset(from);
+        return true;
+    }
+
+    function _triggerVoteReset(address user) internal {
         uint256 masterMantisListSize = masterMantisList.length;
         for (uint256 i = 0; i < masterMantisListSize; i++) {
             address masterMantis = masterMantisList[i];
-            IMasterMantis(masterMantis).resetVote(from);
-            IMasterMantis(masterMantis).resetVote(to);
+            IMasterMantis(masterMantis).resetVote(user);
         }
-        return true;
     }
 
     function _updateMasterRewardFactor(address user) internal {

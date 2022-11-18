@@ -130,6 +130,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
 
     function setGaugeWeights(uint256 _gaugeAssetWeight, uint256 _gaugeVoteWeight) external onlyOwner {
         require(_gaugeAssetWeight + _gaugeVoteWeight == 100, "Incorrect sum");
+        gaugeUpdate();
         gaugeAssetWeight = _gaugeAssetWeight;
         gaugeVoteWeight = _gaugeVoteWeight;
         emit GaugeWeightUpdated(_gaugeAssetWeight, _gaugeVoteWeight);
@@ -209,9 +210,11 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     }
 
     // Add a new lp to the pool. Can only be called by the owner.
-    function add(uint256 _allocPoint, address _lpToken, bool _withUpdate) external onlyOwner {
-        if (_withUpdate) {
-            massUpdatePools();
+    function add(uint256 _allocPoint, address _lpToken) external onlyOwner {
+        massUpdatePools();
+        uint256 poolSize = poolInfo.length;
+        for (uint256 pid=0; pid < poolSize; pid++) {
+            require(poolInfo[pid].lpToken != _lpToken, "Duplicate");
         }
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
         totalAllocPoint += _allocPoint;
@@ -227,10 +230,8 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     }
 
     // Update the given pool's MANTIS allocation point. Can only be called by the owner.
-    function set(uint256 _pid, uint256 _allocPoint, bool _withUpdate) external onlyOwner {
-        if (_withUpdate) {
-            massUpdatePools();
-        }
+    function set(uint256 _pid, uint256 _allocPoint) external onlyOwner {
+        massUpdatePools();
         PoolInfo memory pool = poolInfo[_pid];
         totalAllocPoint = totalAllocPoint - pool.allocPoint + _allocPoint;
         poolInfo[_pid].allocPoint = _allocPoint;
@@ -328,7 +329,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
-    function withdrawFor(address recipient, uint256 _pid, uint256 _amount) external override onlyPoolContracts {
+    function withdrawFor(address recipient, uint256 _pid, uint256 _amount) external override onlyPoolContracts nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][recipient];
         require(user.amount >= _amount, "withdraw: not good");

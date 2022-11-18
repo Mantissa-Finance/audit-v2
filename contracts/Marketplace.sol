@@ -170,7 +170,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         emit ListingDeleted(msg.sender, lid);
     }
 
-    function buy(address seller, uint256 lid, address token) external isAllowedToken(token) whenNotPaused nonReentrant {
+    function buy(address seller, uint256 lid, address token) external notWhitelisted isAllowedToken(token) whenNotPaused nonReentrant {
         Listing memory listing = listings[seller][lid];
         require(listing.veMntAmount > 0 && !listing.sold && !listing.isAuction, "Not a valid listing");
         require(block.timestamp > listing.startTime, "Not Started");
@@ -190,7 +190,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 lid,
         address token,
         uint256 amount  // 6 decimals
-    ) external isAllowedToken(token) whenNotPaused nonReentrant {
+    ) external notWhitelisted isAllowedToken(token) whenNotPaused nonReentrant {
         Listing memory listing = listings[seller][lid];
         require(listing.veMntAmount > 0 && !listing.sold && listing.isAuction, "Not a valid listing");
         require(block.timestamp > listing.startTime, "Not Started");
@@ -216,6 +216,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     function claimAuctionBid(address seller, uint256 lid) external whenNotPaused nonReentrant {
         Listing memory listing = listings[seller][lid];
         require(block.timestamp >= listing.endTime, "Auction not over");
+        require(!listing.sold, "Already claimed");
         Bid memory bid = bids[seller][lid];
         address bidder = bid.bidder;
         require(bidder != address(0), "No bids found");
