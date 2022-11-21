@@ -376,16 +376,22 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 minAmount,
         uint256 deadline
     ) external whenNotPaused nonReentrant checkDeadline(deadline) checkZeroAmount(lpAmount) checkNullAddress(recipient) {
-        ILP lpToken = getLP(token);
-        ILP otherLpToken = getLP(otherToken);
-        (uint256 amount, uint256 otherAmount) = getWithdrawAmountOtherToken(lpToken, otherLpToken, lpAmount);
-        require(otherAmount >= minAmount, "LOW AMT");
+        SwapHelper memory vars;
+        vars.fromLp = getLP(token);
+        vars.toLp = getLP(otherToken);
+        uint256 amount;
+        // lpAmount is 'from' lp token to be burned, vars.lpAmount is lp fees earned by LPs of 'other' token
+        (amount, vars.toAmount, vars.treasuryFees, vars.lpAmount) = getWithdrawAmountOtherToken(vars.fromLp, vars.toLp, lpAmount);
+        require(vars.toAmount >= minAmount, "LOW AMT");
 
-        lpToken.burnFrom(msg.sender, msg.sender, lpAmount);
-        lpToken.updateAssetLiability(0, false, amount, false);
-        otherLpToken.updateAssetLiability(otherAmount, false, 0, false);
-        otherLpToken.withdrawUnderlyer(recipient, otherAmount);
-        emit WithdrawOther(msg.sender, recipient, token, otherToken, lpAmount, otherAmount);
+        vars.fromLp.burnFrom(msg.sender, msg.sender, lpAmount);
+        vars.fromLp.updateAssetLiability(0, false, amount, false);
+        vars.toLp.updateAssetLiability(vars.toAmount + vars.treasuryFees, false, vars.lpAmount, true);
+        vars.toLp.withdrawUnderlyer(recipient, vars.toAmount);
+        if (vars.treasuryFees > 0) {
+            vars.toLp.withdrawUnderlyer(treasury, vars.treasuryFees);
+        }
+        emit WithdrawOther(msg.sender, recipient, token, otherToken, lpAmount, vars.toAmount);
     }
 
     /// @notice Calculates the amount of tokens to be withdrawn and the corresponding fees
@@ -425,7 +431,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     /// @param lpAmount Amount of LP tokens to burn
     /// @return amount token amount which should have been withdrawn. This is used to update liability
     /// @return otherAmount Amount of other tokens to withdraw
-    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount) {
+    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount, uint256 treasuryFees, uint256 lpFees) {
         uint256 otherLiability = otherLpToken.liability();
         require(otherLiability > 0, "ERR");
 
@@ -440,6 +446,12 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(lpTokenLiability > amount, "DIV BY 0");
         uint256 lpTokenLR = (lpToken.asset() * ONE_18) / (lpTokenLiability - amount);
         require(otherLR >= lpTokenLR, "From LR higher");
+
+        uint256 nlr = getNetLiquidityRatio();
+        uint256 feeAmount = otherAmount * _getSwapFeeRatio(nlr) / 1e6;
+        lpFees = otherAmount * lpRatio / 1e6;
+        otherAmount = otherAmount - (feeAmount + lpFees);
+        treasuryFees = feeAmount * _getTreasuryRatio(nlr) / 1e6;
     }
 
     /// @notice Swap between from and to tokens.
