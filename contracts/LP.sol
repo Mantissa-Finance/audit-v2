@@ -44,6 +44,10 @@ contract LP is Initializable, Ownable, ERC20, ILP {
     mapping(uint256 => SumHistory) private sumHistory;
     uint256 private dayIndex;
 
+    uint256 private updateInterval;
+
+    uint256 public liabilityLimit;
+
 
     modifier onlyPools() {
         require(pools[msg.sender], 'Not Allowed');
@@ -67,6 +71,8 @@ contract LP is Initializable, Ownable, ERC20, ILP {
         lastUpdate = block.timestamp;
         lastWindowUpdate = block.timestamp;
         windows = 10;
+        updateInterval = 3 minutes;
+        liabilityLimit = 2_000_000 * 10**underlier.decimals();
     }
 
     function setPool(address _pool, bool _status) external onlyOwner {
@@ -84,6 +90,15 @@ contract LP is Initializable, Ownable, ERC20, ILP {
     function setWindows(uint256 _windows) external onlyOwner {
         require(_windows > 0, "Cannot be 0");
         windows = _windows;
+    }
+
+    function setUpdateInterval(uint256 _updateInterval) external onlyOwner {
+        require(_updateInterval > 0, "Cannot be 0");
+        updateInterval = _updateInterval;
+    }
+
+    function setLiabilityLimit(uint256 _liabilityLimit) external onlyOwner {
+        liabilityLimit = _liabilityLimit;
     }
 
     function approve(address spender, uint256 amount) public override(ERC20, ILP) returns (bool) {
@@ -123,9 +138,10 @@ contract LP is Initializable, Ownable, ERC20, ILP {
         }
     }
 
-    function updateAssetLiability(uint256 assetAmount, bool assetIncrease, uint256 liabilityAmount, bool liabilityIncrease) external override onlyPools {
+    function updateAssetLiability(uint256 assetAmount, bool assetIncrease, uint256 liabilityAmount, bool liabilityIncrease, bool checkLimit) external override onlyPools {
         uint256 oldAsset = asset;
         uint256 oldLiability = liability;
+        require(!checkLimit || oldLiability + liabilityAmount <= liabilityLimit, "LP Limit Reached");
         if (assetAmount > 0) {
             if (assetIncrease) {
                 asset += assetAmount;
@@ -160,7 +176,7 @@ contract LP is Initializable, Ownable, ERC20, ILP {
             }
         }
         uint256 windowDuration = block.timestamp - lastWindowUpdate;
-        if (windowDuration >= 1 days) {
+        if (windowDuration >= updateInterval) {
             sumHistory[dayIndex] = SumHistory({
                 runningSum: runningSum,
                 duration: windowDuration

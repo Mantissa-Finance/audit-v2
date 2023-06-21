@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IVemnt {
-    function deposit(uint256 amount) external;
+    function deposit(address recipient, uint256 amount) external;
 }
 
 contract MockPiston {
@@ -19,6 +19,6 @@ contract MockPiston {
 
     function stake(uint amount) external {
         mnt.approve(address(vemnt), amount);
-        vemnt.deposit(amount);
+        vemnt.deposit(address(this), amount);
     }
 }

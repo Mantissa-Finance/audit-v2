@@ -13,7 +13,7 @@ import "./interfaces/ILP.sol";
 import "./interfaces/IMasterMantis.sol";
 import "./interfaces/IPoolHelper.sol";
 
-contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
+contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     event AddLP(address indexed token, address indexed lpToken, address indexed _feed);
@@ -100,7 +100,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(_treasury != address(0), "ZERO");
         require(_poolHelper != address(0), "ZERO");
         if (_masterMantis != address(0)) {
-        	masterMantis = IMasterMantis(_masterMantis);
+            masterMantis = IMasterMantis(_masterMantis);
         }
         treasury = _treasury;
         poolHelper = IPoolHelper(_poolHelper);
@@ -123,7 +123,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function setMasterMantis(address _masterMantis) external onlyOwner checkNullAddress(_masterMantis) {
-    	masterMantis = IMasterMantis(_masterMantis);
+        masterMantis = IMasterMantis(_masterMantis);
     }
 
     function setTreasury(address _treasury) external onlyOwner checkNullAddress(_treasury) {
@@ -447,7 +447,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 otherLiability = otherLpToken.liability();
         require(otherLiability > 0, "ERR");
 
-        uint256 otherLpAmount = (lpAmount * (10 ** otherLpToken.decimals())) / (10 ** lpToken.decimals());
+        uint256 otherLpAmount = _getOracleAdjustedAmount(lpAmount, lpToken, otherLpToken);
         otherAmount = otherLpAmount * otherLiability / otherLpToken.totalSupply();
 
         uint256 otherLR = ((otherLpToken.asset() - otherAmount) * ONE_18) / otherLiability;
@@ -517,7 +517,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 fromLiability
     ) public view returns (uint256 toAmount, uint256 feeAmount, uint256 treasuryFees, uint256 lpAmount) {
         require(swapAllowed, "CANNOT");
-        uint256 adjustedToAmount = ( amount * (10 ** toLp.decimals()) ) / (10 ** fromLp.decimals());
+        uint256 adjustedToAmount = _getOracleAdjustedAmount(amount, fromLp, toLp);
         if (!isOneTap) {
             fromAsset = fromLp.asset();
             fromLiability = fromLp.liability();
@@ -671,5 +671,10 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         AggregatorV3Interface feed = AggregatorV3Interface(priceFeeds[_address]);
         ( , int price, , , ) = feed.latestRoundData();
         return uint(price) * ONE_18 / (10 ** feed.decimals());
+    }
+
+    function _getOracleAdjustedAmount(uint256 amount, ILP fromLp, ILP toLp) internal view returns (uint256) {
+        return ( amount * tokenOraclePrice(address(fromLp)) * (10 ** toLp.decimals()) ) / 
+            ( tokenOraclePrice(address(toLp)) * (10 ** fromLp.decimals()) );
     }
 }

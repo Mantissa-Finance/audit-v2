@@ -99,8 +99,8 @@ describe("Marketplace", async function () {
         await pool.addLP(usdc.address, lpusdc.address, usdcFeed.address);
         await pool.addLP(usdt.address, lpusdt.address, usdtFeed.address);
 
-        await mm.add(10000, lpusdc.address, true);
-        await mm.add(10000, lpusdt.address, true);
+        await mm.add(10000, lpusdc.address);
+        await mm.add(10000, lpusdt.address);
         await mm.setPoolContract(pool.address, true);
 
         await usdc.approve(pool.address, toMwei('10000000000'));
@@ -116,6 +116,7 @@ describe("Marketplace", async function () {
         await mm.deposit(deployer, 0, toMwei('100000'));
         await mnt.connect(treasurySigner).transfer(mm.address, toWei('100000'));
         await mnt.connect(treasurySigner).transfer(deployer, toWei('100000'));
+        await mnt.connect(treasurySigner).transfer(user, toWei('100000'));
 
         await vemnt.addMasterMantis(mm.address);
         await mnt.approve(vemnt.address, toWei('100000000'));
@@ -127,7 +128,7 @@ describe("Marketplace", async function () {
         await usdc.connect(userSigner).approve(marketplace.address, toWei('100000000'))
         await dai.connect(userSigner).approve(marketplace.address, toWei('100000000'))
 
-        await vemnt.deposit(toWei('60000'))
+        await vemnt.deposit(deployer, toWei('60000'))
         await increaseTime(60*ONE_DAY)
         await vemnt.claim()
 
@@ -201,6 +202,7 @@ describe("Marketplace", async function () {
         await marketplace.addListing(1000, toMwei('100'), currentTime+100, false)
         await expect(marketplace.connect(userSigner).buy(deployer, 1, usdc.address)).to.be.revertedWith('Not Started')
         await increaseTime(1801);
+        console.log(await vemnt.userData(user))
         await marketplace.connect(userSigner).buy(deployer, 1, usdc.address)
 
         const newUserUsdc = parseInt(fromMwei(await usdc.balanceOf(deployer)));
@@ -319,6 +321,7 @@ describe("Marketplace", async function () {
         await expect(marketplace.claimAuctionBid(deployer, 1)).to.be.revertedWith('Auction not over');
         await increaseTime(11000)
         await marketplace.claimAuctionBid(deployer, 1)
+        await expect(marketplace.claimAuctionBid(deployer, 1)).to.be.revertedWith('Already claimed');
 
         const newUserUsdc = parseInt(fromMwei(await usdc.balanceOf(deployer)));
         const newUserDai = parseInt(fromWei(await dai.balanceOf(deployer)));

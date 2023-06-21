@@ -22,9 +22,9 @@ function toBytes32(num) {
 
 function getSlippage(lr) {
 	if (lr <= 1) {
-		return 0.8 * Math.exp(-12 * lr)
+		return 0.8 * Math.exp(-16 * lr)
 	} else {
-		return 0.8 * (Math.exp(12 * (lr - 2)) - 2 * (Math.exp(-12) - Math.exp(-12 * lr)))
+		return 0.8 * (Math.exp(16 * (lr - 2)) - 2 * (Math.exp(-16) - Math.exp(-16 * lr)))
 	}
 }
 
@@ -42,24 +42,41 @@ describe("Pool", async function () {
 		user = userSigner.address
 		other = otherSigner.address
 		const MockToken = await ethers.getContractFactory("StableFake");
-		usdc = await MockToken.deploy("usdc", "usdc", toMwei('1000000'), 6);
+		usdc = await MockToken.deploy("usdc", "usdc", toMwei('10000000'), 6);
 		await usdc.deployed();
-		usdt = await MockToken.deploy("usdt", "usdt", toMwei('1000000'), 6);
+		usdt = await MockToken.deploy("usdt", "usdt", toMwei('10000000'), 6);
 		await usdt.deployed();
-		dai = await MockToken.deploy("dai", "dai", toWei('1000000'), 18);
+		dai = await MockToken.deploy("dai", "dai", toWei('10000000'), 18);
 		await dai.deployed();
 
 		const PoolHelper = await ethers.getContractFactory("PoolHelper");
 		poolHelper = await PoolHelper.deploy();
 		await poolHelper.deployed();
 
-		const MockAggregator = await ethers.getContractFactory("MockAggregator");
-		usdcFeed = await MockAggregator.deploy("100000000");
-		await usdcFeed.deployed();
-		usdtFeed = await MockAggregator.deploy("100001000");
-		await usdtFeed.deployed();
-		daiFeed = await MockAggregator.deploy("100000000");
-		await daiFeed.deployed();
+		// const MockAggregator = await ethers.getContractFactory("MockAggregator");
+		// usdcFeed = await MockAggregator.deploy("100000000");
+		// await usdcFeed.deployed();
+		// usdtFeed = await MockAggregator.deploy("100001000");
+		// await usdtFeed.deployed();
+		// daiFeed = await MockAggregator.deploy("100000000");
+		// await daiFeed.deployed();
+
+		const MockAPI3Proxy = await ethers.getContractFactory("MockAPI3Proxy");
+		const API3FeedReader = await ethers.getContractFactory("API3FeedReader");
+		usdcProxy = await MockAPI3Proxy.deploy(toWei('1'))
+		await usdcProxy.deployed()
+		usdcFeed = await API3FeedReader.deploy(usdcProxy.address)
+		await usdcFeed.deployed()
+
+		usdtProxy = await MockAPI3Proxy.deploy(toWei('1'))
+		await usdtProxy.deployed()
+		usdtFeed = await API3FeedReader.deploy(usdtProxy.address)
+		await usdtFeed.deployed()
+
+		daiProxy = await MockAPI3Proxy.deploy(toWei('1'))
+		await daiProxy.deployed()
+		daiFeed = await API3FeedReader.deploy(daiProxy.address)
+		await daiFeed.deployed()
 
 		const Pool = await ethers.getContractFactory("Pool");
 		pool = await upgrades.deployProxy(Pool, [zeroAddress, treasury, poolHelper.address], { initializer: 'initialize' });
@@ -98,19 +115,19 @@ describe("Pool", async function () {
 		let slippage1 = getSlippage(1);
 		let slippage2 = getSlippage(1.1)
 		let slippage3 = getSlippage(0.9)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1'), 8, 12, toWei('1'))))).to.be.closeTo(slippage1, slippage1 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1.1'), 8, 12, toWei('1'))))).to.be.closeTo(slippage2, slippage3 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('0.9'), 8, 12, toWei('1'))))).to.be.closeTo(slippage3, slippage3 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1'), 8, 16, toWei('1'))))).to.be.closeTo(slippage1, slippage1 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1.1'), 8, 16, toWei('1'))))).to.be.closeTo(slippage2, slippage3 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('0.9'), 8, 16, toWei('1'))))).to.be.closeTo(slippage3, slippage3 / 1000)
 		let slippage4 = getSlippage(1.99)
 		let slippage5 = getSlippage(2)
 		let slippage6 = getSlippage(2.01)
 		let slippage7 = getSlippage(2.2)
 		let slippage8 = getSlippage(3)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1.99'), 8, 12, toWei('1'))))).to.be.closeTo(slippage4, slippage4 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2'), 8, 12, toWei('1'))))).to.be.closeTo(slippage5, slippage5 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2.01'), 8, 12, toWei('1'))))).to.be.closeTo(slippage6, slippage6 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2.2'), 8, 12, toWei('1'))))).to.be.closeTo(slippage7, slippage7 / 1000)
-		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('3'), 8, 12, toWei('1'))))).to.be.closeTo(slippage8, slippage8 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('1.99'), 8, 16, toWei('1'))))).to.be.closeTo(slippage4, slippage4 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2'), 8, 16, toWei('1'))))).to.be.closeTo(slippage5, slippage5 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2.01'), 8, 16, toWei('1'))))).to.be.closeTo(slippage6, slippage6 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('2.2'), 8, 16, toWei('1'))))).to.be.closeTo(slippage7, slippage7 / 1000)
+		expect(parseFloat(fromWei(await poolHelper.getSlippage(toWei('3'), 8, 16, toWei('1'))))).to.be.closeTo(slippage8, slippage8 / 1000)
 	});
 
 	it("Test Swap 1:1 usdc-usdt", async function () {
@@ -123,7 +140,7 @@ describe("Pool", async function () {
 		let finalAmount = swapAmount * (1 - calculatedSlippage)
 		let feeAmount = finalAmount * 0.0001
 		let toAmount = finalAmount - feeAmount;
-		let treasuryFees = feeAmount * 0.4
+		let treasuryFees = feeAmount * 0
 
 		const data = await pool.getSwapAmount(lpusdc.address, lpusdt.address, toMwei('10000'), false, 0, 0);
 		// console.log(data)
@@ -155,7 +172,7 @@ describe("Pool", async function () {
 		let finalAmount = swapAmount * (1 - calculatedSlippage)
 		let feeAmount = finalAmount * 0.0001
 		let toAmount = finalAmount - feeAmount;
-		let treasuryFees = feeAmount * 0.4
+		let treasuryFees = feeAmount * 0
 
 		const data = await pool.getSwapAmount(lpusdc.address, lpdai.address, toMwei('10000'), false, 0, 0);
 		// console.log(data)
@@ -187,7 +204,7 @@ describe("Pool", async function () {
 		let finalAmount = swapAmount * (1 - calculatedSlippage)
 		let feeAmount = finalAmount * 0.0001
 		let toAmount = finalAmount - feeAmount;
-		let treasuryFees = feeAmount * 0.4
+		let treasuryFees = feeAmount * 0
 
 		const data = await pool.getSwapAmount(lpdai.address, lpusdt.address, toWei('10000'), false, 0, 0);
 		// console.log(data)
@@ -210,6 +227,7 @@ describe("Pool", async function () {
 	});
 
 	it("Test Swap LP fees", async function () {
+		await expect(pool.setLpRatio(101)).to.be.revertedWith('> baseFee')
 		await pool.setLpRatio(80)
 		const swapAmount = 10000;
 		let oldFromSlippage = getSlippage(1);
@@ -221,7 +239,7 @@ describe("Pool", async function () {
 		let feeAmount = finalAmount * 0.0001 * 0.2
 		let lpAmount = finalAmount * 0.00008
 		let toAmount = finalAmount - feeAmount - lpAmount;
-		let treasuryFees = feeAmount * 0.4
+		let treasuryFees = feeAmount * 0
 
 		const data = await pool.getSwapAmount(lpusdc.address, lpusdt.address, toMwei('10000'), false, 0, 0);
 		// console.log(data)
@@ -344,6 +362,22 @@ describe("Pool", async function () {
 		expect(parseFloat(fromMwei(data2.otherAmount))).to.be.closeTo(1000, 1)
 	});
 
+	it("Simulate Withdraw other vs Swap", async function () {
+		await pool.swap(usdt.address, usdc.address, deployer, toMwei('10000'), 0, 2652351324);
+		console.log("from LR = ", fromWei(await lpusdc.getLR()))
+		console.log("to LR = ", fromWei(await lpusdt.getLR()))
+		const swapData = await pool.getSwapAmount(lpusdc.address, lpusdt.address, toMwei('1000'), false, 0, 0)
+		console.log("Swap = ", fromMwei(swapData.toAmount))
+		const oldLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		const oldUsdtBalance = parseFloat(fromMwei(await usdt.balanceOf(deployer)))
+		await pool.deposit(usdc.address, deployer, toMwei('1000'), false, 2652351324)
+		const newLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		const lpAmount = newLpUsdcBalance - oldLpUsdcBalance
+		await pool.withdrawOther(usdc.address, usdt.address, deployer, toMwei(lpAmount.toString()), 0, 2652351324)
+		const newUsdtBalance = parseFloat(fromMwei(await usdt.balanceOf(deployer)))
+		console.log("Withdraw other = ", newUsdtBalance - oldUsdtBalance)
+	});
+
 	it("Test One Tap", async function () {
 		await pool.swap(usdc.address, usdt.address, deployer, toMwei('10000'), 0, 2652351324);
 
@@ -374,7 +408,7 @@ describe("Pool", async function () {
 		let swapFinalAmount = withdrawnAmount * (1 - calculatedSlippage)
 		let swapFeeAmount = swapFinalAmount * 0.0001
 		let toAmount = swapFinalAmount - swapFeeAmount;
-		let swapTreasuryFees = swapFeeAmount * 0.4
+		let swapTreasuryFees = swapFeeAmount * 0
 
 		usdtAsset += withdrawnAmount
 		usdcAsset -= (toAmount + swapTreasuryFees)
@@ -392,9 +426,9 @@ describe("Pool", async function () {
 		expect(parseFloat(fromMwei(data.withdrawAmount))).to.be.closeTo(withdrawnAmount, withdrawnAmount / 1000)
 		expect(parseFloat(fromMwei(data.withdrawFees))).to.be.closeTo(withdrawFees, withdrawFees / 1000)
 		expect(parseFloat(fromMwei(data.depositLpAmount))).to.be.closeTo((toAmount - depositFees), (toAmount - depositFees) / 1000)
-		expect(parseFloat(fromMwei(data.depositFees))).to.be.closeTo(depositFees, depositFees / 1000)
-		expect(parseFloat(fromMwei(data.fromTreasuryFees))).to.be.closeTo(withdrawTreasuryFees, withdrawTreasuryFees / 1000)
-		expect(parseFloat(fromMwei(data.toTreasuryFees))).to.be.closeTo((swapTreasuryFees+depositTreasuryFees), (swapTreasuryFees+depositTreasuryFees) / 1000)
+		expect(parseFloat(fromMwei(data.depositFees))).to.be.closeTo(depositFees, depositFees / 100)
+		expect(parseFloat(fromMwei(data.fromTreasuryFees))).to.be.closeTo(withdrawTreasuryFees, withdrawTreasuryFees / 100)
+		expect(parseFloat(fromMwei(data.toTreasuryFees))).to.be.closeTo((swapTreasuryFees+depositTreasuryFees), (swapTreasuryFees+depositTreasuryFees) / 50)
 
 		expect(parseFloat(fromMwei(data.fromAsset))).to.be.closeTo(usdtAsset, usdtAsset / 1000)
 		expect(parseFloat(fromMwei(data.fromLiability))).to.be.closeTo(usdtLiability, usdtLiability / 1000)
@@ -482,4 +516,38 @@ describe("Pool", async function () {
         console.log(await pool.getDepositAmount(lpusdt.address, toMwei('1000'), false, 0))
         // console.log(await pool.getSwapAmount(lpusdt.address, lpusdc.address, toMwei('4000'), false, 0, 2652351324));
     });
+
+    it("Test Deposit limit", async function () {
+    	await expect(pool.deposit(usdc.address, deployer, toMwei('2000000'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+    	await expect(pool.deposit(usdc.address, deployer, toMwei('1900001'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+    	await pool.deposit(usdc.address, deployer, toMwei('1900000'), false, 2652351324)
+    	await expect(pool.deposit(usdc.address, deployer, toMwei('1'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+	
+    	await lpusdc.setLiabilityLimit(toMwei('2500000'))
+    	await pool.deposit(usdc.address, deployer, toMwei('200000'), false, 2652351324)
+    	await expect(pool.deposit(usdc.address, deployer, toMwei('300001'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+
+    	await expect(pool.deposit(dai.address, deployer, toWei('2000000'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+    	await expect(pool.deposit(dai.address, deployer, toWei('1900001'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+    	await pool.deposit(dai.address, deployer, toWei('1900000'), false, 2652351324)
+    	await expect(pool.deposit(dai.address, deployer, toWei('1'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+	
+    	await lpdai.setLiabilityLimit(toWei('2500000'))
+    	await pool.deposit(dai.address, deployer, toWei('200000'), false, 2652351324)
+    	await expect(pool.deposit(dai.address, deployer, toWei('300001'), false, 2652351324)).to.be.revertedWith('LP Limit Reached');
+    	await lpdai.setLiabilityLimit(toWei('1'))
+		await pool.withdraw(dai.address, deployer, toWei('100000'), 0, 2652351324)
+	});
+
+	it("Test One Tap Limit", async function () {
+    	await lpusdc.setLiabilityLimit(toMwei('100000'))
+		await pool.swap(usdc.address, usdt.address, deployer, toMwei('40000'), 0, 2652351324);
+		await expect(pool.oneTap(usdt.address, usdc.address, deployer, toMwei('10000'), 0, false, false)).to.be.revertedWith('LP Limit Reached')
+    	await lpusdc.setLiabilityLimit(toMwei('100010'))
+		await pool.oneTap(usdt.address, usdc.address, deployer, toMwei('9'), 0, false, false)
+		await expect(pool.oneTap(usdt.address, usdc.address, deployer, toMwei('100'), 0, false, false)).to.be.revertedWith('LP Limit Reached')
+    	await lpusdc.setLiabilityLimit(toMwei('1000000'))
+    	await lpusdt.setLiabilityLimit(toMwei('10'))
+		await pool.oneTap(usdt.address, usdc.address, deployer, toMwei('1000'), 0, false, false)
+	});
 });

@@ -18,7 +18,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     event ListingAdded(address indexed seller, uint256 indexed lid, Listing listing);
     event ListingDeleted(address indexed seller, uint256 indexed lid);
     event AuctionBid(address indexed seller, uint256 indexed lid, address indexed bidder, address token, uint256 amount);
-    event Bought(address indexed seller, uint256 indexed lid, address indexed buyer, address token, uint256 amount);
+    event Bought(address indexed seller, uint256 indexed lid, address indexed buyer, address token, uint256 amount, uint256 buyTime);
 
     event TreasuryUpdated(address indexed treasury);
     event FeesUpdated(uint256 indexed fees);
@@ -182,7 +182,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         mntLp.approve(address(veMnt), listing.mntLpAmount);
         require(veMnt.exchangeVeMnt(seller, msg.sender, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
         listings[seller][lid].sold = true;
-        emit Bought(seller, lid, msg.sender, token, listing.minPrice);
+        emit Bought(seller, lid, msg.sender, token, listing.minPrice, block.timestamp);
     }
 
     function makeAuctionBid(
@@ -229,6 +229,6 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         mntLp.approve(address(veMnt), listing.mntLpAmount);
         require(veMnt.exchangeVeMnt(seller, bidder, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
         listings[seller][lid].sold = true;
-        emit Bought(seller, lid, bidder, token, bid.amount);
+        emit Bought(seller, lid, bidder, token, bid.amount, block.timestamp);
     }
 }

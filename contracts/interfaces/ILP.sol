@@ -8,7 +8,7 @@ interface ILP {
 
     function decimals() external view returns (uint8);
 
-    function updateAssetLiability(uint256 assetAmount, bool assetIncrease, uint256 liabilityAmount, bool liabilityIncrease) external;
+    function updateAssetLiability(uint256 assetAmount, bool assetIncrease, uint256 liabilityAmount, bool liabilityIncrease, bool checkLimit) external;
 
     function mint(address recipient, address user, uint256 amount) external;
 

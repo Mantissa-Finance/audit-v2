@@ -23,6 +23,7 @@ const blockTimestamp = async function() {
 }
 const increaseTime = async function (duration) {
     await ethers.provider.send("evm_increaseTime", [duration]);
+    await ethers.provider.send('evm_mine');
 }
 
 async function mineNBlocks(n) {
@@ -93,8 +94,8 @@ describe("veMNT", async function () {
 
         await vemnt.addMasterMantis(mm.address);
 
-        await mm.add(25, lpusdc.address, true);
-        await mm.add(25, lpusdt.address, true);
+        await mm.add(25, lpusdc.address);
+        await mm.add(25, lpusdt.address);
 
         await usdc.approve(pool.address, toMwei('10000000000'));
         await usdt.approve(pool.address, toMwei('10000000000'));
@@ -117,8 +118,73 @@ describe("veMNT", async function () {
         await piston.stake(toWei('100'));
     });
 
+    it("Test vemnt deposit", async function () {
+        await vemnt.deposit(deployer, toWei('10000'))
+        await increaseTime(86400)
+        await vemnt.claim()
+        const veMntPerSec = parseFloat(fromWei(await vemnt.veMntPerSec()))
+        let expectedVemnt = veMntPerSec * 86400 * 10000
+        let vemntUser = parseFloat(fromWei(await vemnt.balanceOf(deployer)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+        let userData = await vemnt.userData(deployer)
+        let expectedRate = parseFloat(fromWei(userData.veMntRate))
+        await increaseTime(86400*365)
+        await vemnt.deposit(deployer, toWei('10000'))
+        await vemnt.claim()
+        expectedVemnt += expectedRate * 365 * 86400 * 10000
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(deployer)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+        userData = await vemnt.userData(deployer)
+        expectedRate = parseFloat(fromWei(userData.veMntRate))
+        await increaseTime(86400*400)
+        await vemnt.deposit(deployer, toWei('10000'))
+        await vemnt.claim()
+        expectedVemnt += expectedRate * 400 * 86400 * 20000
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(deployer)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+    });
+
+    it("Test vemnt deposit other", async function () {
+        await vemnt.deposit(user, toWei('10000'))
+        await increaseTime(86400)
+        await vemnt.claim()
+        const veMntPerSec = parseFloat(fromWei(await vemnt.veMntPerSec()))
+        let expectedVemnt = 0
+        let vemntUser = parseFloat(fromWei(await vemnt.balanceOf(deployer)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+
+        await vemnt.connect(userSigner).claim()
+        expectedVemnt = veMntPerSec * 86400 * 10000
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(user)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+        let userData = await vemnt.userData(user)
+        let expectedRate = parseFloat(fromWei(userData.veMntRate))
+        await increaseTime(86400*365)
+        await vemnt.deposit(user, toWei('10000'))
+        await vemnt.claim()
+        expectedVemnt = 0
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(deployer)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
+
+        await vemnt.connect(userSigner).claim()
+        expectedVemnt += expectedRate * 365 * 86400 * 10000
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(user)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 100)
+        userData = await vemnt.userData(user)
+        expectedRate = parseFloat(fromWei(userData.veMntRate))
+        await increaseTime(86400*400)
+
+        await mnt.transfer(user, toWei('10000'))
+        await mnt.connect(userSigner).approve(vemnt.address, toWei('100000'))
+        await vemnt.connect(userSigner).deposit(user, toWei('10000'))
+        await vemnt.connect(userSigner).claim()
+        expectedVemnt += expectedRate * 400 * 86400 * 20000
+        vemntUser = parseFloat(fromWei(await vemnt.balanceOf(user)))
+        expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 100)
+    });
+
     it("Test vemnt rate", async function () {
-        await vemnt.deposit(toWei('10000'))
+        await vemnt.deposit(deployer, toWei('10000'))
         await increaseTime(86400)
         await vemnt.claim()
         const veMntPerSec = parseFloat(fromWei(await vemnt.veMntPerSec()))
@@ -143,7 +209,7 @@ describe("veMNT", async function () {
         expect(vemntUser).to.be.closeTo(expectedVemnt, expectedVemnt / 1000)
         userData = await vemnt.userData(deployer)
         expect(userData.veMntRate).to.be.eq('0')
-        await vemnt.deposit(toWei('10000'))
+        await vemnt.deposit(deployer, toWei('10000'))
         expectedRate = veMntPerSec / 2
         userData = await vemnt.userData(deployer)
         expect(parseFloat(fromWei(userData.veMntRate))).to.be.closeTo(expectedRate, expectedRate / 1000)

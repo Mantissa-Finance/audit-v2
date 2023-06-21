@@ -260,7 +260,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     }
 
     function _getRewardFactor(uint256 _amount, uint256 veMntBalance) internal pure returns (uint256) {
-        return _amount * (1e12 + sqrt(veMntBalance)) / 1e12;
+        return _amount * (1e13 + sqrt(veMntBalance)) / 1e13;
     }
 
     // Update reward vairables for all pools. Be careful of gas spending!

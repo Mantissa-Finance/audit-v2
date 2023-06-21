@@ -14,7 +14,7 @@ import "./interfaces/IveMNT.sol";
 contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
     using SafeERC20 for IERC20;
 
-    event Deposit(address indexed user, uint256 amount);
+    event Deposit(address indexed sender, address indexed recipient, uint256 amount);
     event Claim(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 amount);
 
@@ -53,7 +53,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     function initialize(address _mntLp) public initializer {
         require(address(_mntLp) != address(0), 'zero address');
-        __ERC20_init('vote MNT', 'veMNT');
+        __ERC20_init('vote-escrowed MNT', 'veMNT');
         __Ownable_init();
         __ReentrancyGuard_init_unchained();
 
@@ -102,10 +102,10 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         }
     }
 
-    function deposit(uint256 amount) external checkCaller nonReentrant {
+    function deposit(address recipient, uint256 amount) external checkCaller nonReentrant {
         require(amount > 0, "Cannot be 0");
         mntLp.safeTransferFrom(msg.sender, address(this), amount);
-        UserData memory user = userData[msg.sender];
+        UserData memory user = userData[recipient];
         if (user.amount == 0) {
             user.veMntRate = veMntPerSec;
             user.lastClaim = block.timestamp;
@@ -116,8 +116,8 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
             user.lastClaim = newLastClaim;
             user.amount += amount;
         }
-        userData[msg.sender] = user;
-        emit Deposit(msg.sender, amount);
+        userData[recipient] = user;
+        emit Deposit(msg.sender, recipient, amount);
     }
 
     function claim() external nonReentrant {

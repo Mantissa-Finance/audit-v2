@@ -34,9 +34,11 @@ async function mineNBlocks(n) {
 
 async function poolLog() {
     const poolLength = await mm.poolLength()
+    console.log("---------------------")
     for (let index = 0; index < poolLength; index++) {
         console.log(await mm.poolInfo(index));
     }
+    console.log("---------------------")
 }
 
 const zeroAddress = '0x0000000000000000000000000000000000000000';
@@ -86,12 +88,16 @@ describe("MasterMantis", async function () {
         mnt = await MNT.deploy(treasury);
         await mnt.deployed();
 
+        const DummyVeMnt = await ethers.getContractFactory("DummyVeMnt");
+        dvemnt = await upgrades.deployProxy(DummyVeMnt, [], { initializer: 'initialize' });
+        await dvemnt.deployed();
+
         const veMNT = await ethers.getContractFactory("veMNT");
         vemnt = await upgrades.deployProxy(veMNT, [mnt.address], { initializer: 'initialize' });
         await vemnt.deployed();
 
         const MasterMantis = await ethers.getContractFactory("MasterMantis");
-        mm = await upgrades.deployProxy(MasterMantis, [mnt.address, vemnt.address, mntPerBlock, await blockTimestamp()+86400*16], { initializer: 'initialize' });
+        mm = await upgrades.deployProxy(MasterMantis, [mnt.address, dvemnt.address, mntPerBlock, await blockTimestamp()+86400*16], { initializer: 'initialize' });
         await mm.deployed();
 
         const LP = await ethers.getContractFactory("LP");
@@ -107,7 +113,7 @@ describe("MasterMantis", async function () {
         await lpusdp.deployed();
 
         const Rewarder = await ethers.getContractFactory("Rewarder");
-        rewarder = await Rewarder.deploy(rew.address, lpusdc.address, "1000000000000000000", mm.address);
+        rewarder = await Rewarder.deploy(rew.address, lpusdc.address, toWei("1"), mm.address);
         await rewarder.deployed();
 
         await pool.setTreasury(deployer);
@@ -119,16 +125,16 @@ describe("MasterMantis", async function () {
         await pool.addLP(usdp.address, lpusdp.address, usdtFeed.address);
         await pool.setSwapAllowed(true);
 
-        await mm.add(10000, lpusdc.address, true);
-        await mm.add(10000, lpusdt.address, true);
-        await mm.add(9000, lpdai.address, true);
-        await mm.add(8000, lpmai.address, true);
-        await mm.add(5000, lpusdp.address, true);
+        await mm.add(10000, lpusdc.address);
+        await mm.add(10000, lpusdt.address);
+        await mm.add(9000, lpdai.address);
+        await mm.add(8000, lpmai.address);
+        await mm.add(5000, lpusdp.address);
         await mm.setRewarder(0, rewarder.address);
         await mm.setPoolContract(pool.address, true);
 
+        await mm.setVeMnt(vemnt.address)
         await vemnt.addMasterMantis(mm.address)
-
 
         await usdc.transfer(user, toMwei('1000000'))
         await usdc.approve(pool.address, toMwei('10000000000'));
@@ -163,7 +169,7 @@ describe("MasterMantis", async function () {
         expect(midMntBalance - oldMntBalance).to.be.closeTo(pendingRewards, pendingRewards / 100)
 
         await mm.deposit(deployer, 0, toMwei('10000'))
-        await vemnt.deposit(toWei('100000'))
+        await vemnt.deposit(deployer, toWei('10000'))
         const mid2MntBalance = parseFloat(fromWei(await mnt.balanceOf(deployer)))
         
         await mineNBlocks(1000)
@@ -211,8 +217,8 @@ describe("MasterMantis", async function () {
 
         await mnt.approve(vemnt.address, toWei('10000000'))
         await mnt.connect(userSigner).approve(vemnt.address, toWei('10000000'))
-        await vemnt.deposit(toWei('100000'))
-        await vemnt.connect(userSigner).deposit(toWei('100000'))
+        await vemnt.deposit(deployer, toWei('100000'))
+        await vemnt.connect(userSigner).deposit(user, toWei('100000'))
 
         await increaseTime(8640000)
 
@@ -236,6 +242,10 @@ describe("MasterMantis", async function () {
         await mm.vote(votePayload)
         await mm.connect(userSigner).vote(votePayload2)
         await increaseTime(8640000)
+        await mm.gaugeUpdate()
+        await poolLog();
+        await increaseTime(8640000)
+        await vemnt.withdraw(1)
         await mm.gaugeUpdate()
         await poolLog();
     });
