@@ -38,8 +38,8 @@ describe("Vesting", async function () {
         deployer = deployerSigner.address
         user = userSigner.address
         other = otherSigner.address
-        const MNT = await ethers.getContractFactory("MNT");
-        mnt = await MNT.deploy(deployer);
+        const MNT = await ethers.getContractFactory("MNTS");
+        mnt = await MNT.deploy(zeroAddress, deployer, toWei('500000000'));
         await mnt.deployed();
 
         const currentTime = await blockTimestamp();

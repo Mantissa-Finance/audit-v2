@@ -53,7 +53,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     function initialize(address _mntLp) public initializer {
         require(address(_mntLp) != address(0), 'zero address');
-        __ERC20_init('vote-escrowed MNT', 'veMNT');
+        __ERC20_init('vote-escrowed Mantis', 'veMNTS');
         __Ownable_init();
         __ReentrancyGuard_init_unchained();
 

@@ -70,8 +70,8 @@ describe("Marketplace", async function () {
         pool = await upgrades.deployProxy(Pool, [zeroAddress, treasury, poolHelper.address], { initializer: 'initialize' });
         await pool.deployed();
 
-        const MNT = await ethers.getContractFactory("MNT");
-        mnt = await MNT.deploy(treasury);
+        const MNT = await ethers.getContractFactory("MNTS");
+        mnt = await MNT.deploy(zeroAddress, treasury, toWei('500000000'));
         await mnt.deployed();
 
         const veMNT = await ethers.getContractFactory("veMNT");

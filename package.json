@@ -30,6 +30,7 @@
     "web3": "^1.7.3"
   },
   "dependencies": {
+    "@layerzerolabs/solidity-examples": "^0.0.12",
     "@openzeppelin/contracts": "^4.4.2",
     "@openzeppelin/contracts-upgradeable": "^4.4.2"
   }
