@@ -100,7 +100,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(_treasury != address(0), "ZERO");
         require(_poolHelper != address(0), "ZERO");
         if (_masterMantis != address(0)) {
-        	masterMantis = IMasterMantis(_masterMantis);
+            masterMantis = IMasterMantis(_masterMantis);
         }
         treasury = _treasury;
         poolHelper = IPoolHelper(_poolHelper);
@@ -123,7 +123,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function setMasterMantis(address _masterMantis) external onlyOwner checkNullAddress(_masterMantis) {
-    	masterMantis = IMasterMantis(_masterMantis);
+        masterMantis = IMasterMantis(_masterMantis);
     }
 
     function setTreasury(address _treasury) external onlyOwner checkNullAddress(_treasury) {
@@ -392,16 +392,16 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         vars.fromLp = getLP(token);
         vars.toLp = getLP(otherToken);
         uint256 amount;
-        // lpAmount is 'from' lp token to be burned, vars.lpAmount is lp fees earned by LPs of 'other' token
-        (amount, vars.toAmount, vars.treasuryFees, vars.lpAmount) = getWithdrawAmountOtherToken(vars.fromLp, vars.toLp, lpAmount);
+        // lpAmount is 'from' lp token to be burned.
+        (amount, vars.toAmount, vars.treasuryFees) = getWithdrawAmountOtherToken(vars.fromLp, vars.toLp, lpAmount);
         require(vars.toAmount >= minAmount, "LOW AMT");
 
         vars.fromLp.burnFrom(msg.sender, msg.sender, lpAmount);
-        vars.fromLp.updateAssetLiability(0, false, amount, false, false);
-        vars.toLp.updateAssetLiability(vars.toAmount + vars.treasuryFees, false, vars.lpAmount, true, false);
+        vars.fromLp.updateAssetLiability(vars.treasuryFees, false, amount, false, false);
+        vars.toLp.updateAssetLiability(vars.toAmount, false, 0, true, false);
         vars.toLp.withdrawUnderlyer(recipient, vars.toAmount);
         if (vars.treasuryFees > 0) {
-            vars.toLp.withdrawUnderlyer(treasury, vars.treasuryFees);
+            vars.fromLp.withdrawUnderlyer(treasury, vars.treasuryFees);
         }
         emit WithdrawOther(msg.sender, recipient, token, otherToken, lpAmount, vars.toAmount);
     }
@@ -443,27 +443,30 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     /// @param lpAmount Amount of LP tokens to burn
     /// @return amount token amount which should have been withdrawn. This is used to update liability
     /// @return otherAmount Amount of other tokens to withdraw
-    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount, uint256 treasuryFees, uint256 lpFees) {
+    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount, uint256 treasuryFees) {
+        uint256 lpTokenLiability = lpToken.liability();
+        require(lpTokenLiability > amount, "DIV BY 0");
+
+        (uint256 withdrawAmount, uint256 withdrawFees, uint256 withdrawTreasuryFees) = getWithdrawAmount(lpToken, lpAmount, false);
+        amount = withdrawAmount;
+        withdrawAmount -= withdrawFees;
+        treasuryFees = withdrawTreasuryFees;
+
+        uint256 fromAsset = lpToken.asset() - withdrawAmount - treasuryFees;
+        uint256 fromLiability = lpTokenLiability - amount;
+
+        (otherAmount, , , ) = getSwapAmount(lpToken, otherLpToken, withdrawAmount, true, fromAsset, fromLiability);
+
+        fromAsset += withdrawAmount;
+
         uint256 otherLiability = otherLpToken.liability();
         require(otherLiability > 0, "ERR");
-
-        uint256 otherLpAmount = (lpAmount * (10 ** otherLpToken.decimals())) / (10 ** lpToken.decimals());
-        otherAmount = otherLpAmount * otherLiability / otherLpToken.totalSupply();
 
         uint256 otherLR = ((otherLpToken.asset() - otherAmount) * ONE_18) / otherLiability;
         require(otherLR >= ONE_18, "LR low");
         
-        uint256 lpTokenLiability = lpToken.liability();
-        amount = lpAmount * lpTokenLiability / lpToken.totalSupply();
-        require(lpTokenLiability > amount, "DIV BY 0");
-        uint256 lpTokenLR = (lpToken.asset() * ONE_18) / (lpTokenLiability - amount);
+        uint256 lpTokenLR = fromAsset * ONE_18 / fromLiability;
         require(otherLR >= lpTokenLR, "From LR higher");
-
-        uint256 nlr = getNetLiquidityRatio();
-        uint256 feeAmount = otherAmount * _getSwapFeeRatio(nlr) / 1e6;
-        lpFees = otherAmount * lpRatio / 1e6;
-        otherAmount = otherAmount - (feeAmount + lpFees);
-        treasuryFees = feeAmount * _getTreasuryRatio(nlr) / 1e6;
     }
 
     /// @notice Swap between from and to tokens.

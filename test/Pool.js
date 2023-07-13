@@ -360,6 +360,103 @@ describe("Pool", async function () {
 		const data2 = await pool.getWithdrawAmountOtherToken(lpdai.address, lpusdt.address, toWei('1000'))
 		expect(parseFloat(fromWei(data2.amount))).to.be.closeTo(1000, 1)
 		expect(parseFloat(fromMwei(data2.otherAmount))).to.be.closeTo(1000, 1)
+
+		await pool.swap(dai.address, usdc.address, deployer, toWei('3000'), 0, 2652351324);
+
+
+		oldLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		oldLpDaiBalance = parseFloat(fromWei(await lpdai.balanceOf(deployer)))
+		oldUsdcBalance = parseFloat(fromMwei(await usdc.balanceOf(deployer)))
+		oldDaiBalance = parseFloat(fromWei(await dai.balanceOf(deployer)))
+		oldFromAsset = parseFloat(fromMwei(await lpusdc.asset()))
+		oldFromLiability = parseFloat(fromMwei(await lpusdc.liability()))
+		oldToAsset = parseFloat(fromWei(await lpdai.asset()))
+		oldToLiability = parseFloat(fromWei(await lpdai.liability()))
+
+		withdrawData = await pool.getWithdrawAmount(lpusdc.address, toMwei('1000'), false)
+		amount = parseFloat(fromMwei(withdrawData.amount))
+		fees = parseFloat(fromMwei(withdrawData.fees))
+		finalAmount = amount - fees
+		treasuryFees = parseFloat(fromMwei(withdrawData.treasuryFees))
+		midFromAsset = oldFromAsset - finalAmount - treasuryFees
+		expectedFromLiability = oldFromLiability - amount
+
+		swapData = await pool.getSwapAmount(lpusdc.address, lpdai.address, toMwei(finalAmount.toFixed(6)),
+			true, toMwei(midFromAsset.toFixed(6)), toMwei(expectedFromLiability.toFixed(6)))
+		toAmount = parseFloat(fromWei(swapData.toAmount))
+
+		expectedFromAsset = midFromAsset + finalAmount
+		expectedToAsset = oldToAsset - toAmount
+
+		await pool.withdrawOther(usdc.address, dai.address, deployer, toMwei('1000'), 0, 2652351324)
+		
+		newFromAsset = parseFloat(fromMwei(await lpusdc.asset()))
+		newFromLiability = parseFloat(fromMwei(await lpusdc.liability()))
+		newToAsset = parseFloat(fromWei(await lpdai.asset()))
+		newToLiability = parseFloat(fromWei(await lpdai.liability()))
+		newLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		newLpDaiBalance = parseFloat(fromWei(await lpdai.balanceOf(deployer)))
+		newUsdcBalance = parseFloat(fromMwei(await usdc.balanceOf(deployer)))
+		newDaiBalance = parseFloat(fromWei(await dai.balanceOf(deployer)))
+
+		expect(oldLpUsdcBalance - newLpUsdcBalance).to.be.closeTo(1000, 0.1)
+		expect(newLpDaiBalance - oldLpDaiBalance).to.be.closeTo(0, 0.0001)
+		expect(newUsdcBalance - oldUsdcBalance).to.be.closeTo(0, 0.0001)
+		expect(newDaiBalance - oldDaiBalance).to.be.closeTo(toAmount, toAmount / 10000)
+
+		expect(newFromAsset).to.be.closeTo(expectedFromAsset, expectedFromAsset / 10000)
+		expect(newFromLiability).to.be.closeTo(expectedFromLiability, expectedFromLiability / 10000)
+		expect(newToAsset).to.be.closeTo(expectedToAsset, expectedToAsset / 10000)
+		expect(newToLiability).to.be.eq(oldToLiability)
+	});
+
+	it("Test Withdraw other imbalance", async function () {
+		await pool.swap(usdc.address, dai.address, deployer, toMwei('60000'), 0, 2652351324);
+
+		oldLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		oldLpDaiBalance = parseFloat(fromWei(await lpdai.balanceOf(deployer)))
+		oldUsdcBalance = parseFloat(fromMwei(await usdc.balanceOf(deployer)))
+		oldDaiBalance = parseFloat(fromWei(await dai.balanceOf(deployer)))
+		oldFromAsset = parseFloat(fromWei(await lpdai.asset()))
+		oldFromLiability = parseFloat(fromWei(await lpdai.liability()))
+		oldToAsset = parseFloat(fromMwei(await lpusdc.asset()))
+		oldToLiability = parseFloat(fromMwei(await lpusdc.liability()))
+
+		withdrawData = await pool.getWithdrawAmount(lpdai.address, toWei('10000'), false)
+		amount = parseFloat(fromWei(withdrawData.amount))
+		fees = parseFloat(fromWei(withdrawData.fees))
+		finalAmount = amount - fees
+		treasuryFees = parseFloat(fromWei(withdrawData.treasuryFees))
+		midFromAsset = oldFromAsset - finalAmount - treasuryFees
+		expectedFromLiability = oldFromLiability - amount
+
+		swapData = await pool.getSwapAmount(lpdai.address, lpusdc.address, toWei(finalAmount.toFixed(18)),
+			true, toWei(midFromAsset.toFixed(18)), toWei(expectedFromLiability.toFixed(18)))
+		toAmount = parseFloat(fromMwei(swapData.toAmount))
+
+		expectedFromAsset = midFromAsset + finalAmount
+		expectedToAsset = oldToAsset - toAmount
+
+		await pool.withdrawOther(dai.address, usdc.address, deployer, toWei('10000'), 0, 2652351324)
+		
+		newFromAsset = parseFloat(fromWei(await lpdai.asset()))
+		newFromLiability = parseFloat(fromWei(await lpdai.liability()))
+		newToAsset = parseFloat(fromMwei(await lpusdc.asset()))
+		newToLiability = parseFloat(fromMwei(await lpusdc.liability()))
+		newLpUsdcBalance = parseFloat(fromMwei(await lpusdc.balanceOf(deployer)))
+		newLpDaiBalance = parseFloat(fromWei(await lpdai.balanceOf(deployer)))
+		newUsdcBalance = parseFloat(fromMwei(await usdc.balanceOf(deployer)))
+		newDaiBalance = parseFloat(fromWei(await dai.balanceOf(deployer)))
+
+		expect(oldLpDaiBalance - newLpDaiBalance).to.be.closeTo(10000, 0.1)
+		expect(newLpUsdcBalance - oldLpUsdcBalance).to.be.closeTo(0, 0.0001)
+		expect(newDaiBalance - oldDaiBalance).to.be.closeTo(0, 0.0001)
+		expect(newUsdcBalance - oldUsdcBalance).to.be.closeTo(toAmount, toAmount / 10000)
+
+		expect(newFromAsset).to.be.closeTo(expectedFromAsset, expectedFromAsset / 10000)
+		expect(newFromLiability).to.be.closeTo(expectedFromLiability, expectedFromLiability / 10000)
+		expect(newToAsset).to.be.closeTo(expectedToAsset, expectedToAsset / 10000)
+		expect(newToLiability).to.be.eq(oldToLiability)
 	});
 
 	it("Simulate Withdraw other vs Swap", async function () {
