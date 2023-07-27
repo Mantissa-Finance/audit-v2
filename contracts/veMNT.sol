@@ -57,7 +57,7 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
         __Ownable_init();
         __ReentrancyGuard_init_unchained();
 
-        veMntPerSec = 3170979198376;
+        veMntPerSec = 3_170_979_198_376;
         decayFactor = veMntPerSec / (2 * 365 days);     // veMnt rate goes to 0 after 2 years.
         mntLp = IERC20(_mntLp);
     }
@@ -70,7 +70,10 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     function removeMasterMantis(uint256 index, address _masterMantis) external onlyOwner {
         require(masterMantisList[index] == _masterMantis, "Wrong index");
-        masterMantisList[index] = masterMantisList[masterMantisList.length-1];
+        uint256 lastIndex = masterMantisList.length - 1;
+        if (index != lastIndex) {
+            masterMantisList[index] = masterMantisList[lastIndex];
+        }
         masterMantisList.pop();
         emit MasterMantisRemoved(_masterMantis);
     }
@@ -215,22 +218,24 @@ contract veMNT is Initializable, ERC20, Ownable, ReentrancyGuard, IveMNT {
 
     function _triggerVoteReset(address user) internal {
         uint256 masterMantisListSize = masterMantisList.length;
-        for (uint256 i = 0; i < masterMantisListSize; i++) {
+        for (uint256 i = 0; i < masterMantisListSize;) {
             address masterMantis = masterMantisList[i];
             IMasterMantis(masterMantis).resetVote(user);
+            unchecked {i++;}
         }
     }
 
     function _updateMasterRewardFactor(address user) internal {
         uint256 masterMantisListSize = masterMantisList.length;
-        for (uint256 i = 0; i < masterMantisListSize; i++) {
+        for (uint256 i = 0; i < masterMantisListSize;) {
             address masterMantis = masterMantisList[i];
             IMasterMantis(masterMantis).updateRewardFactor(user);
+            unchecked {i++;}
         }
     }
 
     function _beforeTokenTransfer(address from, address to, uint256) internal override {
-        require(from == address(0) || to == address(0) || (!whitelisted[from] && to == marketplace) || (from == marketplace), "Transfer not allowed");
+        require(from == address(0) || to == address(0) || (!whitelisted[from] && to == marketplace) || from == marketplace, "Transfer not allowed");
     }
 
     function _afterTokenTransfer(address from, address to, uint256) internal override {

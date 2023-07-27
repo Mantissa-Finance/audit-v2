@@ -64,7 +64,8 @@ contract Vesting is Ownable {
         require(contractBalance > 0, "Contract balance is already 0");
         if (_token == mnt) {
             require(contractBalance > amountRemaining, "Nothing to withdraw");
-            uint256 safeAmount = contractBalance - amountRemaining;
+            uint256 safeAmount;
+            unchecked {safeAmount = contractBalance - amountRemaining;}
             IERC20(_token).safeTransfer(msg.sender, safeAmount);
         } else {
             IERC20(_token).safeTransfer(msg.sender, contractBalance);

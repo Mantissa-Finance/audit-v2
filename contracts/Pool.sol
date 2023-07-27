@@ -23,6 +23,12 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     event RiskUpdated(address indexed token, uint256 risk);
     // event SlippageParamsUpdated(uint256 slippageA, uint256 slippageN);
 
+    event PoolHelperSet(address poolHelper);
+    event MasterMantisSet(address masterMantis);
+    event TreasurySet(address treasury);
+    event SwapAllowedSet(bool swapAllowed);
+    event PriceFeedSet(address token, address feed);
+
     event Deposit(address indexed caller, address indexed receiver, address indexed token, uint256 amount, uint256 lpAmount, bool autoStake);
     event Withdraw(address indexed caller, address indexed receiver, address indexed token, uint256 lpAmount, uint256 amount);
     event WithdrawOther(address indexed caller, address indexed receiver, address indexed token, address otherToken, uint256 lpAmount, uint256 otherAmount);
@@ -100,7 +106,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(_treasury != address(0), "ZERO");
         require(_poolHelper != address(0), "ZERO");
         if (_masterMantis != address(0)) {
-            masterMantis = IMasterMantis(_masterMantis);
+        	masterMantis = IMasterMantis(_masterMantis);
         }
         treasury = _treasury;
         poolHelper = IPoolHelper(_poolHelper);
@@ -120,14 +126,17 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
 
     function setPoolHelper(address _poolHelper) external onlyOwner checkNullAddress(_poolHelper) {
         poolHelper = IPoolHelper(_poolHelper);
+        emit PoolHelperSet(_poolHelper);
     }
 
     function setMasterMantis(address _masterMantis) external onlyOwner checkNullAddress(_masterMantis) {
-        masterMantis = IMasterMantis(_masterMantis);
+    	masterMantis = IMasterMantis(_masterMantis);
+        emit MasterMantisSet(_masterMantis);
     }
 
     function setTreasury(address _treasury) external onlyOwner checkNullAddress(_treasury) {
         treasury = _treasury;
+        emit TreasurySet(_treasury);
     }
 
     function setRiskProfile(address _token, uint256 _risk) external onlyOwner checkNullAddress(_token) {
@@ -138,6 +147,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
 
     function setSwapAllowed(bool _swapAllowed) external onlyOwner {
         swapAllowed = _swapAllowed;
+        emit SwapAllowedSet(_swapAllowed);
     }
 
     function pause() external onlyOwner {
@@ -158,6 +168,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     function setLPFeed(address _token, address _feed) external checkNullAddress(_token) checkNullAddress(_feed) onlyOwner {
         address _lpToken = tokenLPs[_token];
         priceFeeds[_lpToken] = _feed;
+        emit PriceFeedSet(_token, _feed);
     }
 
     function removeLP(address _token, uint index) external checkNullAddress(_token) onlyOwner {
@@ -251,7 +262,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function _getTotalAssetLiability(address fromLp, address toLp, uint256 toAmount) internal view returns (uint256 totalAsset, uint256 totalLiability) {
-        for (uint i = 0; i < lpList.length; i++) {
+        for (uint i = 0; i < lpList.length;) {
             ILP lp = lpList[i];
             if (address(lp) != fromLp) {
                 uint256 price = tokenOraclePrice(address(lp));
@@ -262,6 +273,7 @@ contract Pool is Initializable, Ownable, Pausable, ReentrancyGuard {
                 totalAsset += (lpAsset * price) / (10 ** lp.decimals());
                 totalLiability += (lp.liability() * price) / (10 ** lp.decimals());
             }
+            unchecked {i++;}
         }
     }
 

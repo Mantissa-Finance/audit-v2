@@ -25,6 +25,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     event CooldownUpdated(uint256 indexed cooldown);
     event MaxAuctionDurationUpdated(uint256 indexed maxAuctionDuration);
     event AllowedTokenSet(address indexed token, bool status);
+    event MinBidIntervalUpdated(uint256 minBidInterval);
 
     struct Listing {
         uint256 mntLpAmount;
@@ -59,6 +60,11 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     IERC20 public mntLp;
     IveMNT public veMnt;
 
+    uint256 public minBidInterval;
+
+    uint256 private constant AMOUNT_DECIMALS = 1e6;
+    uint256 private constant PERCENT_DECIMALS = 1e4;
+
     modifier notWhitelisted() {
         require(!veMnt.whitelisted(msg.sender), "Whitelisted Contract");
         _;
@@ -88,6 +94,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         exchangeFees = 2_00;
         cooldown = 30 minutes;
         maxAuctionDuration = 5 days;
+        minBidInterval = 1;
     }
 
     function setTreasury(address _treasury) external onlyOwner {
@@ -121,6 +128,12 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         emit AllowedTokenSet(_token, _status);
     }
 
+    function setMinBidInterval(uint256 _minBidInterval) external onlyOwner {
+        require(_minBidInterval > 0, "Cannot be 0");
+        minBidInterval = _minBidInterval;
+        emit MinBidIntervalUpdated(minBidInterval);
+    }
+
     function pause() external onlyOwner {
         _pause();
     }
@@ -135,7 +148,7 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         uint256 endDuration,
         bool isAuction
     ) external zeroCheck(percent) zeroCheck(minPrice) notWhitelisted whenNotPaused nonReentrant {
-        require(percent < 100_00, "Cannot be > 100%");
+        require(percent < PERCENT_DECIMALS, "Cannot be > 100%");
         require(!isAuction || (endDuration > 0 && endDuration <= maxAuctionDuration), "Incorrect end duration");
         uint256 startTime = block.timestamp + cooldown;
         uint256 endTime = startTime + endDuration;
@@ -171,17 +184,17 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function buy(address seller, uint256 lid, address token) external notWhitelisted isAllowedToken(token) whenNotPaused nonReentrant {
-        Listing memory listing = listings[seller][lid];
+        Listing storage listing = listings[seller][lid];
         require(listing.veMntAmount > 0 && !listing.sold && !listing.isAuction, "Not a valid listing");
         require(block.timestamp > listing.startTime, "Not Started");
-        uint256 tokenAmount = (listing.minPrice * (10 ** IERC20(token).decimals())) / 1e6;
-        uint256 feeAmount = tokenAmount * exchangeFees / 1e4;
+        uint256 tokenAmount = (listing.minPrice * (10 ** IERC20(token).decimals())) / AMOUNT_DECIMALS;
+        uint256 feeAmount = tokenAmount * exchangeFees / PERCENT_DECIMALS;
         uint256 sellerAmount = tokenAmount - feeAmount;
         IERC20(token).safeTransferFrom(msg.sender, seller, sellerAmount);
         IERC20(token).safeTransferFrom(msg.sender, treasury, feeAmount);
         mntLp.approve(address(veMnt), listing.mntLpAmount);
         require(veMnt.exchangeVeMnt(seller, msg.sender, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
-        listings[seller][lid].sold = true;
+        listing.sold = true;
         emit Bought(seller, lid, msg.sender, token, listing.minPrice, block.timestamp);
     }
 
@@ -197,12 +210,12 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
         require(block.timestamp < listing.endTime, "Auction Ended");
         Bid memory bid = bids[seller][lid];
         uint256 currentBidAmount = bid.amount;
-        require(amount >= listing.minPrice && amount > currentBidAmount, "Amount too low");
+        require(amount >= listing.minPrice && amount >= currentBidAmount + minBidInterval, "Amount too low");
         if (currentBidAmount > 0) {
-            uint256 currentTokenAmount = (currentBidAmount * (10 ** IERC20(bid.token).decimals())) / 1e6;
+            uint256 currentTokenAmount = (currentBidAmount * (10 ** IERC20(bid.token).decimals())) / AMOUNT_DECIMALS;
             IERC20(bid.token).safeTransfer(bid.bidder, currentTokenAmount);
         }
-        uint256 tokenAmount = (amount * (10 ** IERC20(token).decimals())) / 1e6;
+        uint256 tokenAmount = (amount * (10 ** IERC20(token).decimals())) / AMOUNT_DECIMALS;
         IERC20(token).safeTransferFrom(msg.sender, address(this), tokenAmount);
         bids[seller][lid] = Bid({
             bidder: msg.sender,
@@ -214,21 +227,21 @@ contract Marketplace is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function claimAuctionBid(address seller, uint256 lid) external whenNotPaused nonReentrant {
-        Listing memory listing = listings[seller][lid];
+        Listing storage listing = listings[seller][lid];
         require(block.timestamp >= listing.endTime, "Auction not over");
         require(!listing.sold, "Already claimed");
         Bid memory bid = bids[seller][lid];
         address bidder = bid.bidder;
         require(bidder != address(0), "No bids found");
         address token = bid.token;
-        uint256 tokenAmount = (bid.amount * (10 ** IERC20(token).decimals())) / 1e6;
-        uint256 feeAmount = tokenAmount * exchangeFees / 1e4;
+        uint256 tokenAmount = (bid.amount * (10 ** IERC20(token).decimals())) / AMOUNT_DECIMALS;
+        uint256 feeAmount = tokenAmount * exchangeFees / PERCENT_DECIMALS;
         uint256 sellerAmount = tokenAmount - feeAmount;
         IERC20(token).safeTransfer(seller, sellerAmount);
         IERC20(token).safeTransfer(treasury, feeAmount);
         mntLp.approve(address(veMnt), listing.mntLpAmount);
         require(veMnt.exchangeVeMnt(seller, bidder, listing.mntLpAmount, listing.veMntAmount, listing.veMntRate), "Error");
-        listings[seller][lid].sold = true;
+        listing.sold = true;
         emit Bought(seller, lid, bidder, token, bid.amount, block.timestamp);
     }
 }

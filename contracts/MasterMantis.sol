@@ -30,6 +30,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     event veMntUpdated(address indexed veMnt);
     event PoolContractSet(address indexed pool, bool status);
     event RewarderSet(uint256 indexed pid, address indexed rewarder);
+    event MntContractSet(address mnt);
 
     struct UserInfo {
         uint256 amount;
@@ -142,6 +143,12 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
         emit MntPerBlockUpdated(_mntPerBlock);
     }
 
+    function setMnt(address _mnt) external onlyOwner {
+        require(_mnt != address(0), "Cannot be zero address");
+        mnt = IERC20(_mnt);
+        emit MntContractSet(_mnt);
+    }
+
     function setVeMnt(address _veMnt) external onlyOwner {
         require(_veMnt != address(0), "Cannot be zero address");
         massUpdatePools();
@@ -166,10 +173,11 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
 
     function getTokenPid(address token) external view override returns (uint256) {
         uint256 poolSize = poolInfo.length;
-        for (uint256 i = 0; i < poolSize; i++) {
+        for (uint256 i = 0; i < poolSize;) {
             if (token == address(poolInfo[i].lpToken)) {
                 return i;
             }
+            unchecked {i++;}
         }
         revert("Token not present");
     }
@@ -188,7 +196,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
             uint256 totalVotes;
             uint256[] memory assetList = new uint256[](poolSize);
             uint256[] memory voteList = new uint256[](poolSize);
-            for (uint256 pid = 0; pid < poolSize; pid++) {
+            for (uint256 pid = 0; pid < poolSize;) {
                 updatePool(pid);
                 PoolInfo memory pool = poolInfo[pid];
                 uint256 asset = ILP(pool.lpToken).getEmissionWeightage();
@@ -198,11 +206,13 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
                 totalAsset += asset;
                 totalVotes += votes;
                 ILP(pool.lpToken).resetPeriod();
+                unchecked {pid++;}
             }
-            for (uint256 pid = 0; pid < poolSize; pid++) {
+            for (uint256 pid = 0; pid < poolSize;) {
                 uint256 assetWeight = totalAsset > 0 ? gaugeAssetWeight * assetList[pid] * totalAllocPoint / totalAsset : 0;
                 uint256 voteWeight = totalVotes > 0 ? gaugeVoteWeight * voteList[pid] * totalAllocPoint / totalVotes : 0;
                 poolInfo[pid].allocPoint = (assetWeight + voteWeight) / 100;
+                unchecked {pid++;}
             }
             nextGaugeUpdate = block.timestamp + gaugeUpdateInterval;
             emit GaugeUpdate(totalAsset, totalVotes);
@@ -213,8 +223,9 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     function add(uint256 _allocPoint, address _lpToken) external onlyOwner {
         massUpdatePools();
         uint256 poolSize = poolInfo.length;
-        for (uint256 pid=0; pid < poolSize; pid++) {
+        for (uint256 pid=0; pid < poolSize;) {
             require(poolInfo[pid].lpToken != _lpToken, "Duplicate");
+            unchecked {pid++;}
         }
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
         totalAllocPoint += _allocPoint;
@@ -266,8 +277,9 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
     // Update reward vairables for all pools. Be careful of gas spending!
     function massUpdatePools() public {
         uint256 length = poolInfo.length;
-        for (uint256 pid = 0; pid < length; ++pid) {
+        for (uint256 pid = 0; pid < length;) {
             updatePool(pid);
+            unchecked {++pid;}
         }
     }
 
@@ -363,10 +375,10 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
         emit EmergencyWithdraw(msg.sender, _pid, user.amount);
     }
 
-    function claim(uint256[] memory pids) external nonReentrant {
+    function claim(uint256[] calldata pids) external nonReentrant {
         gaugeUpdate();
         uint256 totalClaimAmount;
-        for (uint i = 0; i < pids.length; i++) {
+        for (uint i = 0; i < pids.length;) {
             uint256 _pid = pids[i];
             updatePool(_pid);
             PoolInfo memory pool = poolInfo[_pid];
@@ -379,6 +391,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
             if (address(rewarders[_pid]) != address(0)) {
                 rewarders[_pid].onMntReward(msg.sender, user.amount);
             }
+            unchecked {i++;}
         }
         safeMntTransfer(msg.sender, totalClaimAmount);
     }
@@ -387,7 +400,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
         uint256 veMntBalance = IERC20(veMnt).balanceOf(_user);
         uint256 totalClaimAmount;
         uint256 poolSize = poolInfo.length;
-        for(uint i = 0; i < poolSize; i++) {
+        for(uint i = 0; i < poolSize;) {
             UserInfo storage user = userInfo[i][_user];
             if (user.amount > 0) {
                 PoolInfo storage pool = poolInfo[i];
@@ -396,6 +409,7 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
                 uint256 newRewardFactor = _getRewardFactor(user.amount, veMntBalance);
                 _updateUserPoolRewardFactor(pool, user, newRewardFactor);
             }
+            unchecked {i++;}
         }
         safeMntTransfer(_user, totalClaimAmount);
     }
@@ -410,22 +424,25 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
         require(payload.totalVotes <= IERC20(veMnt).balanceOf(msg.sender), "Votes too high");
         gaugeUpdate();
         uint256 userVotedPidsSize = userVotedPids[msg.sender].length;
-        for (uint256 i=0; i < userVotedPidsSize; i++) {
+        for (uint256 i=0; i < userVotedPidsSize;) {
             uint256 pid = userVotedPids[msg.sender][i];
             poolInfo[pid].totalVotes -= userVoteItem[msg.sender][pid];
             delete userVoteItem[msg.sender][pid];
+            unchecked {i++;}
         }
         delete userVotedPids[msg.sender];
         uint256 voteAmount;
         uint256 numPids = payload.votes.length;
-        for (uint256 i=0; i < numPids; i++) {
+        for (uint256 i=0; i < numPids;) {
             uint256 amount = payload.votes[i].amount;
             require(amount > 0, "Cannot vote 0 amount");
             uint256 pid = payload.votes[i].pid;
+            require(userVoteItem[msg.sender][pid] == 0, "Duplicate vote");
             userVoteItem[msg.sender][pid] = amount;
             userVotedPids[msg.sender].push(pid);
             poolInfo[pid].totalVotes += amount;
             voteAmount += amount;
+            unchecked {i++;}
         }
         require(voteAmount == payload.totalVotes, "Vote Mismatch");
         userVoteTotal[msg.sender] = voteAmount;
@@ -435,10 +452,11 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
 
     function resetVote(address user) external override onlyVeMnt {
         uint256 userVotedPidsSize = userVotedPids[user].length;
-        for (uint256 i=0; i < userVotedPidsSize; i++) {
+        for (uint256 i=0; i < userVotedPidsSize;) {
             uint256 pid = userVotedPids[user][i];
             poolInfo[pid].totalVotes -= userVoteItem[user][pid];
             delete userVoteItem[user][pid];
+            unchecked {i++;}
         }
         delete userVotedPids[user];
         userVoteTotal[user] = 0;

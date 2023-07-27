@@ -75,7 +75,8 @@ contract Rewarder is Ownable {
             uint256 lpSupply = lpToken.balanceOf(masterMantis);
 
             if (lpSupply > 0) {
-                uint256 blocks = block.number - pool.lastRewardBlock;
+                uint256 blocks;
+                unchecked {blocks = block.number - pool.lastRewardBlock;}
                 uint256 tokenReward = blocks * tokenPerBlock;
                 pool.accTokenPerShare = pool.accTokenPerShare + (tokenReward * ACC_TOKEN_PRECISION / lpSupply);
             }
@@ -136,7 +137,8 @@ contract Rewarder is Ownable {
         uint256 lpSupply = lpToken.balanceOf(masterMantis);
 
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 blocks = block.number - pool.lastRewardBlock;
+            uint256 blocks;
+            unchecked {blocks = block.number - pool.lastRewardBlock;}
             uint256 tokenReward = blocks * tokenPerBlock;
             accTokenPerShare += tokenReward * ACC_TOKEN_PRECISION / lpSupply;
         }
@@ -147,6 +149,6 @@ contract Rewarder is Ownable {
     /// @notice In case rewarder is stopped before emissions finished, this function allows
     /// withdrawal of remaining tokens.
     function emergencyWithdraw() public onlyOwner {
-        rewardToken.safeTransfer(address(msg.sender), rewardToken.balanceOf(address(this)));
+        rewardToken.safeTransfer(msg.sender, rewardToken.balanceOf(address(this)));
     }
 }

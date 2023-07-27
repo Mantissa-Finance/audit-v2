@@ -23,6 +23,12 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
     event RiskUpdated(address indexed token, uint256 risk);
     // event SlippageParamsUpdated(uint256 slippageA, uint256 slippageN);
 
+    event PoolHelperSet(address poolHelper);
+    event MasterMantisSet(address masterMantis);
+    event TreasurySet(address treasury);
+    event SwapAllowedSet(bool swapAllowed);
+    event PriceFeedSet(address token, address feed);
+
     event Deposit(address indexed caller, address indexed receiver, address indexed token, uint256 amount, uint256 lpAmount, bool autoStake);
     event Withdraw(address indexed caller, address indexed receiver, address indexed token, uint256 lpAmount, uint256 amount);
     event WithdrawOther(address indexed caller, address indexed receiver, address indexed token, address otherToken, uint256 lpAmount, uint256 otherAmount);
@@ -120,14 +126,17 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
 
     function setPoolHelper(address _poolHelper) external onlyOwner checkNullAddress(_poolHelper) {
         poolHelper = IPoolHelper(_poolHelper);
+        emit PoolHelperSet(_poolHelper);
     }
 
     function setMasterMantis(address _masterMantis) external onlyOwner checkNullAddress(_masterMantis) {
         masterMantis = IMasterMantis(_masterMantis);
+        emit MasterMantisSet(_masterMantis);
     }
 
     function setTreasury(address _treasury) external onlyOwner checkNullAddress(_treasury) {
         treasury = _treasury;
+        emit TreasurySet(_treasury);
     }
 
     function setRiskProfile(address _token, uint256 _risk) external onlyOwner checkNullAddress(_token) {
@@ -138,6 +147,7 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
 
     function setSwapAllowed(bool _swapAllowed) external onlyOwner {
         swapAllowed = _swapAllowed;
+        emit SwapAllowedSet(_swapAllowed);
     }
 
     function pause() external onlyOwner {
@@ -158,6 +168,7 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
     function setLPFeed(address _token, address _feed) external checkNullAddress(_token) checkNullAddress(_feed) onlyOwner {
         address _lpToken = tokenLPs[_token];
         priceFeeds[_lpToken] = _feed;
+        emit PriceFeedSet(_token, _feed);
     }
 
     function removeLP(address _token, uint index) external checkNullAddress(_token) onlyOwner {
@@ -251,7 +262,7 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
     }
 
     function _getTotalAssetLiability(address fromLp, address toLp, uint256 toAmount) internal view returns (uint256 totalAsset, uint256 totalLiability) {
-        for (uint i = 0; i < lpList.length; i++) {
+        for (uint i = 0; i < lpList.length;) {
             ILP lp = lpList[i];
             if (address(lp) != fromLp) {
                 uint256 price = tokenOraclePrice(address(lp));
@@ -262,6 +273,7 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
                 totalAsset += (lpAsset * price) / (10 ** lp.decimals());
                 totalLiability += (lp.liability() * price) / (10 ** lp.decimals());
             }
+            unchecked {i++;}
         }
     }
 
@@ -392,16 +404,16 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
         vars.fromLp = getLP(token);
         vars.toLp = getLP(otherToken);
         uint256 amount;
-        // lpAmount is 'from' lp token to be burned, vars.lpAmount is lp fees earned by LPs of 'other' token
-        (amount, vars.toAmount, vars.treasuryFees, vars.lpAmount) = getWithdrawAmountOtherToken(vars.fromLp, vars.toLp, lpAmount);
+        // lpAmount is 'from' lp token to be burned.
+        (amount, vars.toAmount, vars.treasuryFees) = getWithdrawAmountOtherToken(vars.fromLp, vars.toLp, lpAmount);
         require(vars.toAmount >= minAmount, "LOW AMT");
 
         vars.fromLp.burnFrom(msg.sender, msg.sender, lpAmount);
-        vars.fromLp.updateAssetLiability(0, false, amount, false, false);
-        vars.toLp.updateAssetLiability(vars.toAmount + vars.treasuryFees, false, vars.lpAmount, true, false);
+        vars.fromLp.updateAssetLiability(vars.treasuryFees, false, amount, false, false);
+        vars.toLp.updateAssetLiability(vars.toAmount, false, 0, true, false);
         vars.toLp.withdrawUnderlyer(recipient, vars.toAmount);
         if (vars.treasuryFees > 0) {
-            vars.toLp.withdrawUnderlyer(treasury, vars.treasuryFees);
+            vars.fromLp.withdrawUnderlyer(treasury, vars.treasuryFees);
         }
         emit WithdrawOther(msg.sender, recipient, token, otherToken, lpAmount, vars.toAmount);
     }
@@ -443,27 +455,30 @@ contract PoolVolatile is Initializable, Ownable, Pausable, ReentrancyGuard {
     /// @param lpAmount Amount of LP tokens to burn
     /// @return amount token amount which should have been withdrawn. This is used to update liability
     /// @return otherAmount Amount of other tokens to withdraw
-    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount, uint256 treasuryFees, uint256 lpFees) {
+    function getWithdrawAmountOtherToken(ILP lpToken, ILP otherLpToken, uint256 lpAmount) public view returns (uint256 amount, uint256 otherAmount, uint256 treasuryFees) {
+        uint256 lpTokenLiability = lpToken.liability();
+        require(lpTokenLiability > amount, "DIV BY 0");
+
+        (uint256 withdrawAmount, uint256 withdrawFees, uint256 withdrawTreasuryFees) = getWithdrawAmount(lpToken, lpAmount, false);
+        amount = withdrawAmount;
+        withdrawAmount -= withdrawFees;
+        treasuryFees = withdrawTreasuryFees;
+
+        uint256 fromAsset = lpToken.asset() - withdrawAmount - treasuryFees;
+        uint256 fromLiability = lpTokenLiability - amount;
+
+        (otherAmount, , , ) = getSwapAmount(lpToken, otherLpToken, withdrawAmount, true, fromAsset, fromLiability);
+
+        fromAsset += withdrawAmount;
+
         uint256 otherLiability = otherLpToken.liability();
         require(otherLiability > 0, "ERR");
-
-        uint256 otherLpAmount = _getOracleAdjustedAmount(lpAmount, lpToken, otherLpToken);
-        otherAmount = otherLpAmount * otherLiability / otherLpToken.totalSupply();
 
         uint256 otherLR = ((otherLpToken.asset() - otherAmount) * ONE_18) / otherLiability;
         require(otherLR >= ONE_18, "LR low");
         
-        uint256 lpTokenLiability = lpToken.liability();
-        amount = lpAmount * lpTokenLiability / lpToken.totalSupply();
-        require(lpTokenLiability > amount, "DIV BY 0");
-        uint256 lpTokenLR = (lpToken.asset() * ONE_18) / (lpTokenLiability - amount);
+        uint256 lpTokenLR = fromAsset * ONE_18 / fromLiability;
         require(otherLR >= lpTokenLR, "From LR higher");
-
-        uint256 nlr = getNetLiquidityRatio();
-        uint256 feeAmount = otherAmount * _getSwapFeeRatio(nlr) / 1e6;
-        lpFees = otherAmount * lpRatio / 1e6;
-        otherAmount = otherAmount - (feeAmount + lpFees);
-        treasuryFees = feeAmount * _getTreasuryRatio(nlr) / 1e6;
     }
 
     /// @notice Swap between from and to tokens.
