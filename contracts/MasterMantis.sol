@@ -383,7 +383,10 @@ contract MasterMantis is Initializable, Ownable, Pausable, ReentrancyGuard, IMas
             updatePool(_pid);
             PoolInfo memory pool = poolInfo[_pid];
             UserInfo storage user = userInfo[_pid][msg.sender];
-            if (user.rewardFactor == 0) continue;
+            if (user.rewardFactor == 0) {
+                unchecked {i++;}
+                continue;
+            }
             uint256 totalRewards = (user.rewardFactor * pool.accMntPerShare / 1e12);
             uint256 pending = totalRewards - user.rewardDebt;
             user.rewardDebt = totalRewards;
